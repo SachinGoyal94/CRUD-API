@@ -36,17 +36,19 @@ Then open your browser:
 
 ## Endpoints
 
-| Method | Path | Description | Status codes |
-|--------|------|-------------|--------------|
-| GET | `/` | API information | 200 |
-| GET | `/health` | Health check | 200 |
-| GET | `/tasks` | List all tasks (supports `?done=`, `?search=`, `?limit=`, `?offset=`) | 200 |
-| GET | `/tasks/{id}` | Get a single task | 200, 404 |
-| POST | `/tasks` | Create a new task | 201, 400 |
-| PUT | `/tasks/{id}` | Update a task's title and/or `done` status | 200, 400, 404 |
-| DELETE | `/tasks/{id}` | Delete a task | 204, 404 |
-| GET | `/stats` | Task statistics (`total`, `done`, `open`) | 200 |
-| POST | `/reset` | Reset tasks to the original 3 seed tasks | 200 |
+| Method | Path           | Description                                                        | Status codes       |
+|--------|----------------|--------------------------------------------------------------------|--------------------|
+| GET    | `/`            | API information                                                    | 200                |
+| GET    | `/health`      | Health check                                                       | 200                |
+| GET    | `/tasks`       | List all tasks (supports `?done=`, `?search=`, `?limit=`, `?offset=`) | 200                |
+| GET    | `/tasks/{id}`  | Get a single task                                                  | 200, 404           |
+| POST   | `/tasks`       | Create a new task                                                  | 201, 400           |
+| PUT    | `/tasks/{id}`  | Update a task's title and/or `done` status                         | 200, 400, 404      |
+| DELETE | `/tasks/{id}`  | Delete a task                                                      | 204, 404           |
+| GET    | `/stats`       | Task statistics (`total`, `done`, `open`)                          | 200                |
+| POST   | `/reset`       | Reset tasks to the original 3 seed tasks                           | 200                |
+
+**Status code legend:** `200` OK, `201` Created, `204` No Content, `400` Bad Request, `404` Not Found
 
 ---
 
