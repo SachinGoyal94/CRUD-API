@@ -54,6 +54,8 @@ Then open your browser:
 
 ## Example curl session
 
+### Read a single task
+
 ```bash
 curl -i http://localhost:8000/tasks/1
 ```
@@ -67,21 +69,35 @@ content-type: application/json
 {"id":1,"title":"Buy milk","done":false}
 ```
 
-Full CRUD cycle:
+### Full CRUD cycle
 
-```bash
-# Create
-curl -i -X POST http://localhost:8000/tasks -H "Content-Type: application/json" -d "{\"title\":\"Buy milk\"}"
+1. **Create** a task:
 
-# Read all
-curl -i http://localhost:8000/tasks
+   ```bash
+   curl -i -X POST http://localhost:8000/tasks \
+     -H "Content-Type: application/json" \
+     -d "{\"title\":\"Buy milk\"}"
+   ```
 
-# Update (use the id returned by POST)
-curl -i -X PUT http://localhost:8000/tasks/4 -H "Content-Type: application/json" -d "{\"done\":true}"
+2. **Read** all tasks:
 
-# Delete
-curl -i -X DELETE http://localhost:8000/tasks/4
-```
+   ```bash
+   curl -i http://localhost:8000/tasks
+   ```
+
+3. **Update** the task (use the `id` returned by POST):
+
+   ```bash
+   curl -i -X PUT http://localhost:8000/tasks/4 \
+     -H "Content-Type: application/json" \
+     -d "{\"done\":true}"
+   ```
+
+4. **Delete** the task:
+
+   ```bash
+   curl -i -X DELETE http://localhost:8000/tasks/4
+   ```
 
 ---
 
