@@ -4,6 +4,17 @@ A small in-memory CRUD API for managing a to-do list, built with Python and Fast
 
 The API supports creating, reading, updating, and deleting tasks. Data lives only in memory, so it resets to the seed tasks whenever the server restarts.
 
+## Contents
+
+- [Run it](#run-it)
+- [Endpoints](#endpoints)
+- [Example curl session](#example-curl-session)
+- [Swagger UI](#swagger-ui)
+- [The mortality experiment](#the-mortality-experiment)
+- [Optional extras included](#optional-extras-included)
+
+---
+
 ## Run it
 
 Make sure you are in the project folder and using the virtual environment at the repository root:
@@ -21,6 +32,8 @@ Then open your browser:
 
 > **Note:** If port `8000` is unavailable on your machine, pick another port, e.g. `..\.venv\Scripts\uvicorn main:app --port 8765`.
 
+---
+
 ## Endpoints
 
 | Method | Path | Description | Status codes |
@@ -34,6 +47,8 @@ Then open your browser:
 | DELETE | `/tasks/{id}` | Delete a task | 204, 404 |
 | GET | `/stats` | Task statistics (`total`, `done`, `open`) | 200 |
 | POST | `/reset` | Reset tasks to the original 3 seed tasks | 200 |
+
+---
 
 ## Example curl session
 
@@ -66,6 +81,8 @@ curl -i -X PUT http://localhost:8000/tasks/4 -H "Content-Type: application/json"
 curl -i -X DELETE http://localhost:8000/tasks/4
 ```
 
+---
+
 ## Swagger UI
 
 FastAPI generates interactive documentation automatically. Visit `/docs` to see every endpoint and try them out without curl.
@@ -74,9 +91,13 @@ FastAPI generates interactive documentation automatically. Visit `/docs` to see 
 
 > Add your own screenshot of `http://localhost:8000/docs` at `docs/swagger-screenshot.png`.
 
+---
+
 ## The mortality experiment
 
 Create a few tasks, restart the server, then call `GET /tasks` again. The new tasks are gone and only the original 3 seed tasks remain. This happens because the "database" is just a Python list in memory; when the process stops, the list disappears. Next week we fix this with a real database.
+
+---
 
 ## Optional extras included
 
