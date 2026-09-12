@@ -1,30 +1,75 @@
-# Task API (SQLite Database-Backed)
+# Task API (Containerized Stack with Docker & Databases)
 
-A CRUD REST API for managing a to-do list, built with Python, FastAPI, and SQLite (via SQLAlchemy) as part of the FlyRank Backend Track internship (Week 3, Assignment A2).
+A CRUD REST API for managing a to-do list, built with Python, FastAPI, SQLAlchemy, SQLite, and PostgreSQL as part of the FlyRank Backend Track internship (Week 3, Assignment A2 & A3).
 
-Moving from Assignment 1's in-memory storage, this API persists all tasks to a real SQLite database (`tasks.db`), ensuring data survives server restarts while preserving identical API contracts and status codes.
+This API supports both **SQLite** for zero-config local development and **PostgreSQL in Docker** for full-stack containerization.
 
 ---
 
 ## Contents
 
-- [Why SQLite?](#why-sqlite)
+- [Containerized Setup with Docker Compose](#containerized-setup-with-docker-compose)
+- [Local Setup (SQLite)](#local-setup-sqlite)
 - [Database Schema & Automatic Initialization](#database-schema--automatic-initialization)
-- [Run it](#run-it)
 - [Endpoints](#endpoints)
 - [Example SQL Queries](#example-sql-queries)
 - [Example curl Session](#example-curl-session)
+- [DB Browser Screenshot](#db-browser-screenshot)
 - [Swagger UI](#swagger-ui)
 - [Proof of Persistence](#proof-of-persistence)
-- [Optional Extras Included](#optional-extras-included)
 
 ---
 
-## Why SQLite?
+## Containerized Setup with Docker Compose
 
-1. **Serverless & Zero-Config:** SQLite requires no standalone database server setup or process management. It operates directly against a single local file (`tasks.db`).
-2. **Persistence:** Unlike in-memory lists, data stored in SQLite is written to disk, surviving server restarts and application crashes.
-3. **Lightweight & Fast:** Ideal for local development, rapid prototyping, and embedded applications with zero setup overhead.
+Run your task API and PostgreSQL database with a single command:
+
+### 1. Configure Secrets
+
+Copy the `.env.example` file to `.env`:
+
+```bash
+cp .env.example .env
+```
+
+The `.env` file contains your connection string:
+```env
+DATABASE_URL=postgresql://postgres:dev@localhost:5432/tasks
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=dev
+POSTGRES_DB=tasks
+```
+
+### 2. Start the Stack
+
+```bash
+docker compose up --build
+```
+
+This starts two services:
+- **`api`**: Your FastAPI application running in Python 3.10-slim (`http://localhost:8000`).
+- **`db`**: A PostgreSQL container with a named volume `taskdata` (`localhost:5432`).
+
+To stop the stack while preserving data in the volume:
+```bash
+docker compose down
+```
+
+---
+
+## Local Setup (SQLite)
+
+Make sure you are in the project folder and using the virtual environment:
+
+```bash
+cd "CRUD API"
+..\.venv\Scripts\uvicorn main:app --reload
+```
+
+Then open your browser:
+- API root: `http://localhost:8000/`
+- Health check: `http://localhost:8000/health`
+- Swagger UI: `http://localhost:8000/docs`
 
 ---
 
@@ -49,23 +94,6 @@ Subsequent server restarts detect existing data and do not duplicate seed rows.
 
 ---
 
-## Run it
-
-Make sure you are in the project folder and using the virtual environment:
-
-```bash
-cd "CRUD API"
-..\.venv\Scripts\uvicorn main:app --reload
-```
-
-Then open your browser:
-
-- API root: `http://localhost:8000/`
-- Health check: `http://localhost:8000/health`
-- Swagger UI: `http://localhost:8000/docs`
-
----
-
 ## Endpoints
 
 | Method | Path | Description | Status Codes |
@@ -84,23 +112,23 @@ Then open your browser:
 
 ## Example SQL Queries
 
-These SQL queries demonstrate direct interaction with `tasks.db` (via DB Browser for SQLite or SQL client):
+These SQL queries demonstrate direct interaction with the database (`tasks.db` or PostgreSQL `taskdb`):
 
 ```sql
 -- 1. List all tasks
 SELECT * FROM tasks;
 
 -- 2. Query completed tasks
-SELECT * FROM tasks WHERE done = 1;
+SELECT * FROM tasks WHERE done = true;
 
 -- 3. Count total tasks
 SELECT COUNT(*) FROM tasks;
 
 -- 4. Mark a task as completed
-UPDATE tasks SET done = 1 WHERE id = 1;
+UPDATE tasks SET done = true WHERE id = 1;
 
 -- 5. Delete a completed task
-DELETE FROM tasks WHERE done = 1;
+DELETE FROM tasks WHERE done = true;
 ```
 
 ---
@@ -127,7 +155,7 @@ content-type: application/json
    ```bash
    curl -i -X POST http://localhost:8000/tasks \
      -H "Content-Type: application/json" \
-     -d "{\"title\":\"Build SQLite database API\"}"
+     -d "{\"title\":\"Build containerized database API\"}"
    ```
 
 2. **Read** single task:
@@ -165,8 +193,5 @@ FastAPI automatically generates interactive OpenAPI documentation at `/docs`. Yo
 
 ## Proof of Persistence
 
-Unlike Week 2 where tasks vanished on server restart:
-1. Create a task via `POST /tasks`.
-2. Stop the uvicorn server (`Ctrl+C`).
-3. Start the server again (`uvicorn main:app --reload`).
-4. Perform `GET /tasks` — your created task remains present in `tasks.db`!
+- **SQLite**: Restarting `uvicorn` retains tasks in `tasks.db`.
+- **Docker Compose**: Stopping containers with `docker compose down` and restarting with `docker compose up` retains data stored in the `taskdata` PostgreSQL volume.
