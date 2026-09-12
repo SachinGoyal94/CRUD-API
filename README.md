@@ -1,23 +1,57 @@
-# Task API
+# Task API (SQLite Database-Backed)
 
-A small in-memory CRUD API for managing a to-do list, built with Python and FastAPI as part of the FlyRank Backend Track internship (Week 2, Assignment A1).
+A CRUD REST API for managing a to-do list, built with Python, FastAPI, and SQLite (via SQLAlchemy) as part of the FlyRank Backend Track internship (Week 3, Assignment A2).
 
-The API supports creating, reading, updating, and deleting tasks. Data lives only in memory, so it resets to the seed tasks whenever the server restarts.
+Moving from Assignment 1's in-memory storage, this API persists all tasks to a real SQLite database (`tasks.db`), ensuring data survives server restarts while preserving identical API contracts and status codes.
+
+---
 
 ## Contents
 
+- [Why SQLite?](#why-sqlite)
+- [Database Schema & Automatic Initialization](#database-schema--automatic-initialization)
 - [Run it](#run-it)
 - [Endpoints](#endpoints)
-- [Example curl session](#example-curl-session)
+- [Example SQL Queries](#example-sql-queries)
+- [Example curl Session](#example-curl-session)
 - [Swagger UI](#swagger-ui)
-- [The mortality experiment](#the-mortality-experiment)
-- [Optional extras included](#optional-extras-included)
+- [Proof of Persistence](#proof-of-persistence)
+- [Optional Extras Included](#optional-extras-included)
+
+---
+
+## Why SQLite?
+
+1. **Serverless & Zero-Config:** SQLite requires no standalone database server setup or process management. It operates directly against a single local file (`tasks.db`).
+2. **Persistence:** Unlike in-memory lists, data stored in SQLite is written to disk, surviving server restarts and application crashes.
+3. **Lightweight & Fast:** Ideal for local development, rapid prototyping, and embedded applications with zero setup overhead.
+
+---
+
+## Database Schema & Automatic Initialization
+
+The database table `tasks` is auto-created on application startup if it does not exist:
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | INTEGER | PRIMARY KEY, AUTOINCREMENT | Unique task identifier |
+| `title` | TEXT | NOT NULL | Task description / title |
+| `done` | BOOLEAN | NOT NULL (Default: `0`) | Completion status |
+
+### Automatic Seeding
+
+When the server starts up, it checks if the `tasks` table is empty. If empty (`count == 0`), it automatically seeds the 3 default tasks:
+1. `{"id": 1, "title": "Buy milk", "done": false}`
+2. `{"id": 2, "title": "Walk the dog", "done": true}`
+3. `{"id": 3, "title": "Read FastAPI docs", "done": false}`
+
+Subsequent server restarts detect existing data and do not duplicate seed rows.
 
 ---
 
 ## Run it
 
-Make sure you are in the project folder and using the virtual environment at the repository root:
+Make sure you are in the project folder and using the virtual environment:
 
 ```bash
 cd "CRUD API"
@@ -26,101 +60,113 @@ cd "CRUD API"
 
 Then open your browser:
 
-- API root: http://localhost:8000/
-- Health check: http://localhost:8000/health
-- Swagger UI: http://localhost:8000/docs
-
-> **Note:** If port `8000` is unavailable on your machine, pick another port, e.g. `..\.venv\Scripts\uvicorn main:app --port 8765`.
+- API root: `http://localhost:8000/`
+- Health check: `http://localhost:8000/health`
+- Swagger UI: `http://localhost:8000/docs`
 
 ---
 
 ## Endpoints
 
-| Method | Path           | Description                                                        | Status codes       |
-|--------|----------------|--------------------------------------------------------------------|--------------------|
-| GET    | `/`            | API information                                                    | 200                |
-| GET    | `/health`      | Health check                                                       | 200                |
-| GET    | `/tasks`       | List all tasks (supports `?done=`, `?search=`, `?limit=`, `?offset=`) | 200                |
-| GET    | `/tasks/{id}`  | Get a single task                                                  | 200, 404           |
-| POST   | `/tasks`       | Create a new task                                                  | 201, 400           |
-| PUT    | `/tasks/{id}`  | Update a task's title and/or `done` status                         | 200, 400, 404      |
-| DELETE | `/tasks/{id}`  | Delete a task                                                      | 204, 404           |
-| GET    | `/stats`       | Task statistics (`total`, `done`, `open`)                          | 200                |
-| POST   | `/reset`       | Reset tasks to the original 3 seed tasks                           | 200                |
-
-**Status code legend:** `200` OK, `201` Created, `204` No Content, `400` Bad Request, `404` Not Found
+| Method | Path | Description | Status Codes |
+|---|---|---|---|
+| GET | `/` | API information | 200 |
+| GET | `/health` | Health check | 200 |
+| GET | `/tasks` | List tasks (supports `?done=`, `?search=`, `?limit=`, `?offset=`) | 200 |
+| GET | `/tasks/{id}` | Get single task by ID | 200, 404 |
+| POST | `/tasks` | Create a new task (database assigns ID, sets `done=false`) | 201, 400 |
+| PUT | `/tasks/{id}` | Update task title and/or `done` status | 200, 400, 404 |
+| DELETE | `/tasks/{id}` | Delete a task | 204, 404 |
+| GET | `/stats` | Aggregate task statistics computed in SQL (`total`, `done`, `open`) | 200 |
+| POST | `/reset` | Truncate and re-seed database with 3 initial tasks | 200 |
 
 ---
 
-## Example curl session
+## Example SQL Queries
 
-### Read a single task
+These SQL queries demonstrate direct interaction with `tasks.db` (via DB Browser for SQLite or SQL client):
+
+```sql
+-- 1. List all tasks
+SELECT * FROM tasks;
+
+-- 2. Query completed tasks
+SELECT * FROM tasks WHERE done = 1;
+
+-- 3. Count total tasks
+SELECT COUNT(*) FROM tasks;
+
+-- 4. Mark a task as completed
+UPDATE tasks SET done = 1 WHERE id = 1;
+
+-- 5. Delete a completed task
+DELETE FROM tasks WHERE done = 1;
+```
+
+---
+
+## Example curl Session
+
+### Read all tasks
 
 ```bash
-curl -i http://localhost:8000/tasks/1
+curl -i http://localhost:8000/tasks
 ```
 
 Output:
-
 ```http
 HTTP/1.1 200 OK
 content-type: application/json
 
-{"id":1,"title":"Buy milk","done":false}
+[{"id":1,"title":"Buy milk","done":false},{"id":2,"title":"Walk the dog","done":true},{"id":3,"title":"Read FastAPI docs","done":false}]
 ```
 
-### Full CRUD cycle
+### Full CRUD Cycle
 
 1. **Create** a task:
-
    ```bash
    curl -i -X POST http://localhost:8000/tasks \
      -H "Content-Type: application/json" \
-     -d "{\"title\":\"Buy milk\"}"
+     -d "{\"title\":\"Build SQLite database API\"}"
    ```
 
-2. **Read** all tasks:
-
+2. **Read** single task:
    ```bash
-   curl -i http://localhost:8000/tasks
+   curl -i http://localhost:8000/tasks/4
    ```
 
-3. **Update** the task (use the `id` returned by POST):
-
+3. **Update** task completion status:
    ```bash
    curl -i -X PUT http://localhost:8000/tasks/4 \
      -H "Content-Type: application/json" \
      -d "{\"done\":true}"
    ```
 
-4. **Delete** the task:
-
+4. **Delete** task:
    ```bash
    curl -i -X DELETE http://localhost:8000/tasks/4
    ```
 
 ---
 
+## DB Browser Screenshot
+
+Here is the database file (`tasks.db`) opened in DB Browser for SQLite showing the `tasks` table and its seeded records:
+
+![DB Browser Screenshot](database_image.png)
+
+---
+
 ## Swagger UI
 
-FastAPI generates interactive documentation automatically. Visit `/docs` to see every endpoint and try them out without curl.
-
-![Swagger UI screenshot](docs/swagger-screenshot.png)
-
-> Add your own screenshot of `http://localhost:8000/docs` at `docs/swagger-screenshot.png`.
+FastAPI automatically generates interactive OpenAPI documentation at `/docs`. You can inspect endpoints, view schemas, and execute live queries directly in the browser.
 
 ---
 
-## The mortality experiment
+## Proof of Persistence
 
-Create a few tasks, restart the server, then call `GET /tasks` again. The new tasks are gone and only the original 3 seed tasks remain. This happens because the "database" is just a Python list in memory; when the process stops, the list disappears. Next week we fix this with a real database.
-
----
-
-## Optional extras included
-
-- **Filtering:** `GET /tasks?done=true`
-- **Search:** `GET /tasks?search=milk`
-- **Pagination:** `GET /tasks?limit=2&offset=2`
-- **Stats:** `GET /stats`
-- **Reset:** `POST /reset`
+Unlike Week 2 where tasks vanished on server restart:
+1. Create a task via `POST /tasks`.
+2. Stop the uvicorn server (`Ctrl+C`).
+3. Start the server again (`uvicorn main:app --reload`).
+4. Perform `GET /tasks` — your created task remains present in `tasks.db`!

@@ -1,11 +1,25 @@
-from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel, Field
+from contextlib import asynccontextmanager
 from typing import List, Optional
+
+from fastapi import Depends, FastAPI, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from database import Task as DBTask, _seed_tasks, get_db, init_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
 
 app = FastAPI(
     title="Task API",
     version="1.0",
-    description="A small in-memory CRUD API for managing a to-do list.",
+    description="A SQLite database-backed CRUD API for managing a to-do list.",
+    lifespan=lifespan,
 )
 
 
@@ -13,6 +27,8 @@ class Task(BaseModel):
     id: int
     title: str
     done: bool
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TaskCreate(BaseModel):
@@ -22,24 +38,6 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: Optional[str] = Field(None, description="New title for the task")
     done: Optional[bool] = Field(None, description="New done status for the task")
-
-
-# In-memory "database" — data is lost when the server restarts.
-_seed_tasks = [
-    {"id": 1, "title": "Buy milk", "done": False},
-    {"id": 2, "title": "Walk the dog", "done": True},
-    {"id": 3, "title": "Read FastAPI docs", "done": False},
-]
-
-tasks: List[dict] = [task.copy() for task in _seed_tasks]
-_next_id = max(task["id"] for task in tasks) + 1 if tasks else 1
-
-
-def _task_or_404(task_id: int) -> dict:
-    for task in tasks:
-        if task["id"] == task_id:
-            return task
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
 
 @app.get("/", summary="API information")
@@ -64,51 +62,57 @@ def list_tasks(
     search: Optional[str] = Query(None, description="Search in task titles"),
     limit: Optional[int] = Query(None, ge=1, description="Maximum number of tasks to return"),
     offset: int = Query(0, ge=0, description="Number of tasks to skip"),
+    db: Session = Depends(get_db),
 ):
     """List all tasks. Supports filtering, searching, and pagination."""
-    result = tasks[:]
+    query = db.query(DBTask)
 
     if done is not None:
-        result = [task for task in result if task["done"] == done]
+        query = query.filter(DBTask.done == done)
 
     if search:
-        result = [task for task in result if search.lower() in task["title"].lower()]
+        query = query.filter(DBTask.title.ilike(f"%{search}%"))
 
-    total_after_filters = len(result)
-    result = result[offset:]
+    query = query.order_by(DBTask.id)
+    query = query.offset(offset)
+
     if limit is not None:
-        result = result[:limit]
+        query = query.limit(limit)
 
-    return result
+    return query.all()
 
 
 @app.get("/tasks/{task_id}", response_model=Task, summary="Get a single task")
-def get_task(task_id: int):
+def get_task(task_id: int, db: Session = Depends(get_db)):
     """Return a single task by its ID."""
-    return _task_or_404(task_id)
+    task = db.query(DBTask).filter(DBTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return task
 
 
 @app.post("/tasks", response_model=Task, status_code=201, summary="Create a task")
-def create_task(payload: TaskCreate):
-    """Create a new task. The server assigns the ID and sets done to false."""
+def create_task(payload: TaskCreate, db: Session = Depends(get_db)):
+    """Create a new task. The database assigns the ID and sets done to false."""
     if payload.title is None or not payload.title.strip():
         raise HTTPException(status_code=400, detail="title is required and cannot be empty")
 
-    global _next_id
-    new_task = {
-        "id": _next_id,
-        "title": payload.title.strip(),
-        "done": False,
-    }
-    _next_id += 1
-    tasks.append(new_task)
+    new_task = DBTask(
+        title=payload.title.strip(),
+        done=False,
+    )
+    db.add(new_task)
+    db.commit()
+    db.refresh(new_task)
     return new_task
 
 
 @app.put("/tasks/{task_id}", response_model=Task, summary="Update a task")
-def update_task(task_id: int, payload: TaskUpdate):
+def update_task(task_id: int, payload: TaskUpdate, db: Session = Depends(get_db)):
     """Update a task's title and/or done status."""
-    task = _task_or_404(task_id)
+    task = db.query(DBTask).filter(DBTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
     if payload.title is None and payload.done is None:
         raise HTTPException(status_code=400, detail="Request body must contain title or done")
@@ -116,33 +120,40 @@ def update_task(task_id: int, payload: TaskUpdate):
     if payload.title is not None:
         if not payload.title.strip():
             raise HTTPException(status_code=400, detail="title cannot be empty")
-        task["title"] = payload.title.strip()
+        task.title = payload.title.strip()
     if payload.done is not None:
-        task["done"] = payload.done
+        task.done = payload.done
 
+    db.commit()
+    db.refresh(task)
     return task
 
 
 @app.delete("/tasks/{task_id}", status_code=204, summary="Delete a task")
-def delete_task(task_id: int):
+def delete_task(task_id: int, db: Session = Depends(get_db)):
     """Delete a task by its ID."""
-    task = _task_or_404(task_id)
-    tasks.remove(task)
+    task = db.query(DBTask).filter(DBTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    db.delete(task)
+    db.commit()
     return None
 
 
 @app.get("/stats", summary="Task statistics")
-def get_stats():
-    """Return aggregate statistics about the task list."""
-    total = len(tasks)
-    done = sum(1 for task in tasks if task["done"])
+def get_stats(db: Session = Depends(get_db)):
+    """Return aggregate statistics about the task list computed via SQL."""
+    total = db.query(func.count(DBTask.id)).scalar() or 0
+    done = db.query(func.count(DBTask.id)).filter(DBTask.done == True).scalar() or 0
     return {"total": total, "done": done, "open": total - done}
 
 
-@app.post("/reset", summary="Reset tasks")
-def reset_tasks():
-    """Reset the in-memory task list back to the original seed tasks."""
-    global tasks, _next_id
-    tasks = [task.copy() for task in _seed_tasks]
-    _next_id = max(task["id"] for task in tasks) + 1 if tasks else 1
-    return tasks
+@app.post("/reset", response_model=List[Task], summary="Reset tasks")
+def reset_tasks(db: Session = Depends(get_db)):
+    """Reset the database task table back to the original seed tasks."""
+    db.query(DBTask).delete()
+    for task_data in _seed_tasks:
+        db.add(DBTask(id=task_data["id"], title=task_data["title"], done=task_data["done"]))
+    db.commit()
+    return db.query(DBTask).order_by(DBTask.id).all()
