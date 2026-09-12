@@ -13,6 +13,8 @@ from auth import (
     UserSignUp,
     UserLogin,
 )
+from llm.schema import TriageRequest, TriageResponse
+from llm.service import triage_message
 
 
 @asynccontextmanager
@@ -22,9 +24,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Task & Auth API",
+    title="Task, Auth & LLM Production API",
     version="1.0",
-    description="A containerized CRUD and Supabase Authentication API.",
+    description="A containerized CRUD, Supabase Auth, and Production LLM Triage API.",
     lifespan=lifespan,
 )
 
@@ -54,9 +56,17 @@ class TaskUpdate(BaseModel):
 def read_root():
     """Returns basic information about the API."""
     return {
-        "name": "Task & Auth API",
+        "name": "Task, Auth & LLM API",
         "version": "1.0",
-        "endpoints": ["/tasks", "/auth/signup", "/auth/login", "/auth/logout", "/public/info", "/protected/profile"],
+        "endpoints": [
+            "/tasks",
+            "/auth/signup",
+            "/auth/login",
+            "/auth/logout",
+            "/public/info",
+            "/protected/profile",
+            "/triage",
+        ],
     }
 
 
@@ -64,6 +74,30 @@ def read_root():
 def health_check():
     """Returns the health status of the server."""
     return {"status": "ok"}
+
+
+# ==========================================
+# Production LLM Triage Endpoint (W7)
+# ==========================================
+
+@app.post("/triage", response_model=TriageResponse, summary="LLM Support Triage", tags=["LLM Production"])
+def triage_endpoint(payload: TriageRequest):
+    """
+    Classify support messages with structured JSON output schema enforcement,
+    input validation, timeout protection, repair retry, quarantine logging, & kill switch.
+    """
+    if not payload.text or not payload.text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="text field is required and cannot be empty",
+        )
+    if len(payload.text) > 2000:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="text field exceeds maximum allowed limit of 2000 characters",
+        )
+
+    return triage_message(payload.text.strip())
 
 
 # ==========================================
