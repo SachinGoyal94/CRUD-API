@@ -1,197 +1,144 @@
-# Task API (Containerized Stack with Docker & Databases)
+# Task & Auth API (Full-Stack Containerized & Authenticated API)
 
-A CRUD REST API for managing a to-do list, built with Python, FastAPI, SQLAlchemy, SQLite, and PostgreSQL as part of the FlyRank Backend Track internship (Week 3, Assignment A2 & A3).
+A production-grade REST API managing tasks with database persistence (SQLite/PostgreSQL) and user authentication (Supabase Auth & JWT Bearer verification), built as part of the FlyRank Backend Track internship (Week 2-4, Assignments A1-A4).
 
-This API supports both **SQLite** for zero-config local development and **PostgreSQL in Docker** for full-stack containerization.
+---
+
+## Features
+
+- **User Authentication:** Sign up, Log in, Log out via Supabase Auth.
+- **JWT Protection:** Protected routes verified using `Authorization: Bearer <token>` middleware.
+- **Interactive Swagger UI:** `/docs` with built-in **Authorize** padlock button for testing bearer tokens.
+- **Dual Database Support:** Instant local execution with **SQLite** (`tasks.db`) and full containerization with **PostgreSQL** in Docker.
+- **Task CRUD Operations:** Full task management with parameterized queries, search, status filtering, and pagination.
 
 ---
 
 ## Contents
 
-- [Containerized Setup with Docker Compose](#containerized-setup-with-docker-compose)
-- [Local Setup (SQLite)](#local-setup-sqlite)
-- [Database Schema & Automatic Initialization](#database-schema--automatic-initialization)
-- [Endpoints](#endpoints)
-- [Example SQL Queries](#example-sql-queries)
+- [Environment Setup](#environment-setup)
+- [Auth & API Endpoints Table](#auth--api-endpoints-table)
+- [Authentication Flow](#authentication-flow)
+- [Run with Docker Compose](#run-with-docker-compose)
+- [Run Locally (SQLite)](#run-locally-sqlite)
 - [Example curl Session](#example-curl-session)
+- [Swagger UI Bearer Auth](#swagger-ui-bearer-auth)
 - [DB Browser Screenshot](#db-browser-screenshot)
-- [Swagger UI](#swagger-ui)
-- [Proof of Persistence](#proof-of-persistence)
 
 ---
 
-## Containerized Setup with Docker Compose
+## Environment Setup
 
-Run your task API and PostgreSQL database with a single command:
-
-### 1. Configure Secrets
-
-Copy the `.env.example` file to `.env`:
+Copy `.env.example` to `.env` and fill in your secrets:
 
 ```bash
 cp .env.example .env
 ```
 
-The `.env` file contains your connection string:
 ```env
-DATABASE_URL=postgresql://postgres:dev@localhost:5432/tasks
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=dev
-POSTGRES_DB=tasks
+# Database configuration
+DATABASE_URL=sqlite:///./tasks.db
+
+# Supabase Auth configuration (From Supabase Dashboard -> Project Settings -> API)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-supabase-anon-key
 ```
 
-### 2. Start the Stack
+> **Note:** `.env` is listed in `.gitignore` and must never be committed.
+
+---
+
+## Auth & API Endpoints Table
+
+| Method | Path | Description | Auth Required | Status Codes |
+|---|---|---|---|---|
+| POST | `/auth/signup` | Register a new user account | No | 201, 400 |
+| POST | `/auth/login` | Authenticate user and return JWT | No | 200, 400, 401 |
+| POST | `/auth/logout` | End current user session | Yes (`Bearer`) | 204, 401 |
+| GET | `/public/info` | Open public information | No | 200 |
+| GET | `/protected/profile` | Read authenticated user profile | Yes (`Bearer`) | 200, 401 |
+| GET | `/protected/dashboard` | Read authenticated user dashboard | Yes (`Bearer`) | 200, 401 |
+| GET | `/` | API metadata | No | 200 |
+| GET | `/health` | Health check | No | 200 |
+| GET | `/tasks` | List tasks (supports filtering & search) | No | 200 |
+| GET | `/tasks/{id}` | Get single task | No | 200, 404 |
+| POST | `/tasks` | Create a new task | No | 201, 400 |
+| PUT | `/tasks/{id}` | Update task title and status | No | 200, 400, 404 |
+| DELETE | `/tasks/{id}` | Delete task | No | 204, 404 |
+| GET | `/stats` | Aggregate task statistics | No | 200 |
+| POST | `/reset` | Re-seed initial tasks | No | 200 |
+
+---
+
+## Authentication Flow
+
+1. **Sign Up (`POST /auth/signup`)**: Pass `{"email": "user@example.com", "password": "password123"}`.
+2. **Log In (`POST /auth/login`)**: Pass `{"email": "user@example.com", "password": "password123"}` to receive `access_token` (JWT).
+3. **Call Protected Endpoint**: Attach header `Authorization: Bearer <access_token>` to request `/protected/profile`.
+4. **Log Out (`POST /auth/logout`)**: Call logout with Bearer token to sign out session.
+
+---
+
+## Run with Docker Compose
 
 ```bash
 docker compose up --build
 ```
 
-This starts two services:
-- **`api`**: Your FastAPI application running in Python 3.10-slim (`http://localhost:8000`).
-- **`db`**: A PostgreSQL container with a named volume `taskdata` (`localhost:5432`).
-
-To stop the stack while preserving data in the volume:
-```bash
-docker compose down
-```
+- API: `http://localhost:8000`
+- Swagger UI: `http://localhost:8000/docs`
 
 ---
 
-## Local Setup (SQLite)
-
-Make sure you are in the project folder and using the virtual environment:
+## Run Locally (SQLite)
 
 ```bash
 cd "CRUD API"
 ..\.venv\Scripts\uvicorn main:app --reload
 ```
 
-Then open your browser:
-- API root: `http://localhost:8000/`
-- Health check: `http://localhost:8000/health`
-- Swagger UI: `http://localhost:8000/docs`
-
----
-
-## Database Schema & Automatic Initialization
-
-The database table `tasks` is auto-created on application startup if it does not exist:
-
-| Column | Type | Constraints | Description |
-|---|---|---|---|
-| `id` | INTEGER | PRIMARY KEY, AUTOINCREMENT | Unique task identifier |
-| `title` | TEXT | NOT NULL | Task description / title |
-| `done` | BOOLEAN | NOT NULL (Default: `0`) | Completion status |
-
-### Automatic Seeding
-
-When the server starts up, it checks if the `tasks` table is empty. If empty (`count == 0`), it automatically seeds the 3 default tasks:
-1. `{"id": 1, "title": "Buy milk", "done": false}`
-2. `{"id": 2, "title": "Walk the dog", "done": true}`
-3. `{"id": 3, "title": "Read FastAPI docs", "done": false}`
-
-Subsequent server restarts detect existing data and do not duplicate seed rows.
-
----
-
-## Endpoints
-
-| Method | Path | Description | Status Codes |
-|---|---|---|---|
-| GET | `/` | API information | 200 |
-| GET | `/health` | Health check | 200 |
-| GET | `/tasks` | List tasks (supports `?done=`, `?search=`, `?limit=`, `?offset=`) | 200 |
-| GET | `/tasks/{id}` | Get single task by ID | 200, 404 |
-| POST | `/tasks` | Create a new task (database assigns ID, sets `done=false`) | 201, 400 |
-| PUT | `/tasks/{id}` | Update task title and/or `done` status | 200, 400, 404 |
-| DELETE | `/tasks/{id}` | Delete a task | 204, 404 |
-| GET | `/stats` | Aggregate task statistics computed in SQL (`total`, `done`, `open`) | 200 |
-| POST | `/reset` | Truncate and re-seed database with 3 initial tasks | 200 |
-
----
-
-## Example SQL Queries
-
-These SQL queries demonstrate direct interaction with the database (`tasks.db` or PostgreSQL `taskdb`):
-
-```sql
--- 1. List all tasks
-SELECT * FROM tasks;
-
--- 2. Query completed tasks
-SELECT * FROM tasks WHERE done = true;
-
--- 3. Count total tasks
-SELECT COUNT(*) FROM tasks;
-
--- 4. Mark a task as completed
-UPDATE tasks SET done = true WHERE id = 1;
-
--- 5. Delete a completed task
-DELETE FROM tasks WHERE done = true;
-```
-
 ---
 
 ## Example curl Session
 
-### Read all tasks
-
+### 1. Sign Up
 ```bash
-curl -i http://localhost:8000/tasks
+curl -i -X POST http://localhost:8000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"user@example.com\",\"password\":\"secret123\"}"
 ```
 
-Output:
-```http
-HTTP/1.1 200 OK
-content-type: application/json
-
-[{"id":1,"title":"Buy milk","done":false},{"id":2,"title":"Walk the dog","done":true},{"id":3,"title":"Read FastAPI docs","done":false}]
+### 2. Log In
+```bash
+curl -i -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"user@example.com\",\"password\":\"secret123\"}"
 ```
 
-### Full CRUD Cycle
+### 3. Call Protected Profile Endpoint
+```bash
+curl -i http://localhost:8000/protected/profile \
+  -H "Authorization: Bearer <YOUR_ACCESS_TOKEN>"
+```
 
-1. **Create** a task:
-   ```bash
-   curl -i -X POST http://localhost:8000/tasks \
-     -H "Content-Type: application/json" \
-     -d "{\"title\":\"Build containerized database API\"}"
-   ```
+### 4. Unauthenticated Call (Returns 401)
+```bash
+curl -i http://localhost:8000/protected/profile
+# Output: HTTP/1.1 401 Unauthorized -> {"detail": "Access token required"}
+```
 
-2. **Read** single task:
-   ```bash
-   curl -i http://localhost:8000/tasks/4
-   ```
+---
 
-3. **Update** task completion status:
-   ```bash
-   curl -i -X PUT http://localhost:8000/tasks/4 \
-     -H "Content-Type: application/json" \
-     -d "{\"done\":true}"
-   ```
+## Swagger UI Bearer Auth
 
-4. **Delete** task:
-   ```bash
-   curl -i -X DELETE http://localhost:8000/tasks/4
-   ```
+FastAPI configures `HTTPBearer` automatically.
+1. Open `http://localhost:8000/docs`.
+2. Click the green **Authorize** button at the top right.
+3. Paste your JWT access token and click **Authorize**.
+4. Test `/protected/profile` directly from the browser!
 
 ---
 
 ## DB Browser Screenshot
 
-Here is the database file (`tasks.db`) opened in DB Browser for SQLite showing the `tasks` table and its seeded records:
-
 ![DB Browser Screenshot](database_image.png)
-
----
-
-## Swagger UI
-
-FastAPI automatically generates interactive OpenAPI documentation at `/docs`. You can inspect endpoints, view schemas, and execute live queries directly in the browser.
-
----
-
-## Proof of Persistence
-
-- **SQLite**: Restarting `uvicorn` retains tasks in `tasks.db`.
-- **Docker Compose**: Stopping containers with `docker compose down` and restarting with `docker compose up` retains data stored in the `taskdata` PostgreSQL volume.
